@@ -1,0 +1,53 @@
+{
+  "name": "@hashscraper/mcp",
+  "version": "0.1.0",
+  "description": "HashScraper MCP server — Coupang top 30 and public web data bots for your AI agent",
+  "mcpName": "io.github.hashscraper/mcp",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "hashscraper-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "catalog.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "inspector": "npx @modelcontextprotocol/inspector node dist/index.js",
+    "prepublishOnly": "npm run build && chmod +x dist/index.js"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "hashscraper",
+    "coupang",
+    "web-scraping",
+    "data-collection",
+    "ai-agent"
+  ],
+  "author": "HashScraper",
+  "license": "MIT",
+  "homepage": "https://www.hashscraper.com/mcp?utm_source=mcp&utm_medium=npm&utm_campaign=mcp",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hashscraper/mcp.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "~5.9"
+  }
+}

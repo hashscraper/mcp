@@ -1,0 +1,12 @@
+# Smithery configuration file: https://smithery.ai/docs/config#smitheryyaml
+
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    properties:
+      hashscraperApiKey:
+        type: string
+        description: "Optional. A HashScraper API key (My page -> API at https://www.hashscraper.com). Leave empty and use the login tool to connect in the browser."
+  commandFunction: |-
+    (config) => ({ command: 'node', args: ['dist/index.js'], env: config.hashscraperApiKey ? { HASHSCRAPER_API_KEY: config.hashscraperApiKey } : {} })
