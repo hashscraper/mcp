@@ -58,6 +58,14 @@ command = "npx"
 args = ["-y", "@hashscraper/mcp"]
 ```
 
+### MCP Bundle (.mcpb)
+
+To build a one-file bundle for apps that install `.mcpb` files (it includes the server and its dependencies, and asks for the optional API key):
+
+```bash
+npm install && npm run pack:mcpb   # -> server.mcpb
+```
+
 ## Connect once
 
 Ask your agent to "connect HashScraper" (or just ask for some data). It calls the `login` tool, which returns a link and an 8-character code. Open the link, sign in (or sign up for free with Google or email), check that the code matches, and click **Approve and connect**. Then tell the agent you approved — it calls `login` again and the key is saved. You never copy or paste the key.

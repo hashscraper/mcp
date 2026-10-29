@@ -1,0 +1,90 @@
+{
+  "manifest_version": "0.3",
+  "name": "hashscraper",
+  "display_name": "HashScraper",
+  "version": "0.1.0",
+  "description": "Coupang top 30 and public web data bots (Naver, Instagram, Olive Young, maps, reviews) for AI agents",
+  "long_description": "Collect public web data from your AI agent with HashScraper's 120+ ready-made data bots — Coupang best-seller top 30 by category, Naver blog/cafe/news/shopping/maps, Instagram, YouTube, Olive Young, Musinsa, Kurly, KREAM, Google/Kakao maps, app stores and more. Connect your account with the login tool (free sign-up included) or set an API key from My page -> API.",
+  "author": {
+    "name": "HashScraper",
+    "url": "https://www.hashscraper.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hashscraper/mcp.git"
+  },
+  "homepage": "https://www.hashscraper.com/mcp?utm_source=mcp&utm_medium=mcpb&utm_campaign=mcp",
+  "support": "https://github.com/hashscraper/mcp/issues",
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "hashscraper",
+    "coupang",
+    "web-scraping",
+    "data-collection",
+    "ai-agent"
+  ],
+  "server": {
+    "type": "node",
+    "entry_point": "dist/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/dist/index.js"
+      ],
+      "env": {
+        "HASHSCRAPER_API_KEY": "${user_config.hashscraper_api_key}"
+      }
+    }
+  },
+  "user_config": {
+    "hashscraper_api_key": {
+      "type": "string",
+      "title": "HashScraper API key (optional)",
+      "description": "Optional. A HashScraper API key from My page -> API at https://www.hashscraper.com. Leave empty and use the login tool to connect in the browser.",
+      "sensitive": true,
+      "required": false,
+      "default": ""
+    }
+  },
+  "tools": [
+    {
+      "name": "login",
+      "description": "Connect your HashScraper account in the browser (device login, free sign-up included)."
+    },
+    {
+      "name": "me",
+      "description": "Show the connected account and how many daily free credits are left today."
+    },
+    {
+      "name": "catalog",
+      "description": "Search the built-in list of 120+ ready-made data bots and their inputs. Works offline."
+    },
+    {
+      "name": "run",
+      "description": "Collect public web data with one HashScraper bot and return the rows."
+    },
+    {
+      "name": "fetch",
+      "description": "Get the rows of an earlier run by dataset id."
+    },
+    {
+      "name": "coupang_categories",
+      "description": "List the Coupang categories whose daily best-selling top 30 is ready."
+    },
+    {
+      "name": "coupang_top",
+      "description": "Get today's best-selling top 30 products of a Coupang category with price, reviews and delivery."
+    }
+  ],
+  "compatibility": {
+    "platforms": [
+      "darwin",
+      "win32",
+      "linux"
+    ],
+    "runtimes": {
+      "node": ">=20.0.0"
+    }
+  }
+}

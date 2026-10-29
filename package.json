@@ -18,6 +18,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "inspector": "npx @modelcontextprotocol/inspector node dist/index.js",
+    "pack:mcpb": "bash scripts/pack-mcpb.sh",
     "prepublishOnly": "npm run build && chmod +x dist/index.js"
   },
   "keywords": [
