@@ -6,7 +6,7 @@
     "url": "https://github.com/hashscraper/mcp",
     "source": "github"
   },
-  "version": "0.3.0",
+  "version": "0.3.1",
   "packages": [
     {
       "registryType": "npm",
@@ -21,6 +21,20 @@
           "description": "Optional. A HashScraper API key from My page -> API. Without it, use the login tool once to connect in the browser.",
           "isRequired": false,
           "format": "string",
+          "isSecret": true
+        }
+      ]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://www.hashscraper.com/mcp",
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "Bearer <HashScraper API key from My page -> API at https://www.hashscraper.com>",
+          "isRequired": true,
           "isSecret": true
         }
       ]
