@@ -1,7 +1,7 @@
 {
   "name": "@hashscraper/mcp",
-  "version": "0.1.0",
-  "description": "HashScraper MCP server — Coupang top 30 and public web data bots for your AI agent",
+  "version": "0.3.0",
+  "description": "HashScraper MCP server — Coupang and Naver Shopping top 30 and public web data bots for your AI agent",
   "mcpName": "io.github.hashscraper/mcp",
   "type": "module",
   "main": "dist/index.js",
@@ -26,6 +26,7 @@
     "model-context-protocol",
     "hashscraper",
     "coupang",
+    "naver",
     "web-scraping",
     "data-collection",
     "ai-agent"

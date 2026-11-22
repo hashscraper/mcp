@@ -10,7 +10,7 @@ export const CLIENT = `agent-mcp/${VERSION}`;
 export const SITE = 'https://www.hashscraper.com';
 export const UTM = 'utm_source=mcp&utm_medium=mcp&utm_campaign=server';
 export const SIGN_UP = `${SITE}/users/sign_up?${UTM}`;
-export const BOT_CATALOG = `${SITE}/schedules/catalog?${UTM}`;
+export const BOT_CATALOG = `${SITE}/bots?${UTM}`;
 export const FOOTER = `Daily monitoring & bulk collection -> HashScraper ${SITE}/quotes/new?${UTM}`;
 export const HELP_EMAIL = 'help@hashscraper.com';
 export const HELP_HINT = `For data this server cannot collect, email ${HELP_EMAIL} with the site, the data you need, how much and how often.`;

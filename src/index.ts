@@ -5,7 +5,8 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { VERSION } from './api.ts';
 import {
-  catalogTool, coupangCategoriesTool, coupangTopTool, defaultRuntime, fetchTool, loginTool, meTool, runTool,
+  catalogTool, coupangCategoriesTool, coupangTopTool, defaultRuntime, fetchTool, loginTool, meTool, naverCategoriesTool, naverTopTool,
+  runTool,
 } from './tools.ts';
 
 const csvPath = z.string().optional().describe('Absolute path ending in .csv. Saves ALL rows to this file (UTF-8 with BOM, opens in Excel) instead of returning them in the answer.');
@@ -37,17 +38,18 @@ function main(): Promise<void> {
   server.registerTool('catalog', {
     title: 'Find a HashScraper bot',
     description: 'Search the built-in list of 120+ ready-made data bots (Coupang, Naver blog/cafe/news/shopping/maps, Instagram, YouTube, Olive Young, Musinsa, Kurly, KREAM, Google/Kakao maps, app stores, community boards …). ' +
-      'Use it to find the worker name and the inputs of a bot before calling run. Works offline; no account needed.',
+      'Use it to find the worker name and the inputs of a bot before calling run. The built-in list works offline without an account; once the user is connected it also searches, live, bots made by HashScraper members (run those with public_bot=<slug>).',
     inputSchema: { search: z.string().optional().describe('Text to look for in site, bot name, summary and inputs, e.g. "coupang", "naver blog", "reviews".') },
-    annotations: { title: 'Find a HashScraper bot', readOnlyHint: true, openWorldHint: false },
+    annotations: { title: 'Find a HashScraper bot', readOnlyHint: true, openWorldHint: true },
   }, (args) => catalogTool(rt, args));
 
   server.registerTool('run', {
     title: 'Collect data with a bot',
-    description: 'Collect public web data with one HashScraper bot (find the worker with catalog first) and return the rows — e.g. a Coupang product page\'s price, 50 Naver blog posts for a keyword, reviews, map places. ' +
+    description: 'Collect public web data with one HashScraper bot (find the worker — or, for a bot made by a member, the public_bot slug — with catalog first) and return the rows — e.g. a Coupang product page\'s price, 50 Naver blog posts for a keyword, reviews, map places. ' +
       'Uses only the daily free credits unless use_credits=true. The first paid use needs the user\'s agreement to the data terms (accept_terms). It waits up to wait_seconds; if the bot is still collecting it returns a dataset id — call fetch later instead of running again.',
     inputSchema: {
-      worker: z.string().describe('Worker name from catalog, e.g. "DemoCoupangDetailWorker".'),
+      worker: z.string().optional().describe('Worker name of a built-in bot from catalog, e.g. "DemoCoupangDetailWorker". Pass exactly one of worker or public_bot.'),
+      public_bot: z.string().optional().describe('Slug of a bot made by a HashScraper member, from the "made by members" part of catalog, e.g. "shopprice1". It is added to the user\'s account and run with the price shown there (credits per row, charged to the user; daily free credits first). Pass exactly one of worker or public_bot.'),
       inputs: z.record(z.union([z.string(), z.number(), z.boolean(), z.array(z.string())])).optional()
         .describe('Bot inputs: keys are "param1"… or the input name / English name from catalog; values are text (several URLs or keywords: an array or one per line). Omitted inputs use the bot\'s saved settings.'),
       use_credits: useCredits, accept_terms: acceptTerms, wait_seconds: waitSeconds, max_rows: maxRows, csv_path: csvPath,
@@ -81,6 +83,26 @@ function main(): Promise<void> {
     },
     annotations: { title: 'Coupang category top 30', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
   }, (args) => coupangTopTool(rt, args));
+
+  server.registerTool('naver_categories', {
+    title: 'Naver Shopping categories with a daily top 30',
+    description: 'List the Naver Shopping categories (3rd level, with the parent path such as "식품 > 음료 > 커피") whose daily best-selling top 30 is ready, with the latest ranking date. Free. Use it to answer "which Naver categories can you rank?" or to pick the right category for naver_top.',
+    inputSchema: {},
+    annotations: { title: 'Naver Shopping categories with a daily top 30', readOnlyHint: true, openWorldHint: true },
+  }, () => naverCategoriesTool(rt, {}));
+
+  server.registerTool('naver_top', {
+    title: 'Naver Shopping category top 30',
+    description: 'Use when the user wants today\'s best-selling / top 30 products of a Naver Shopping category (네이버쇼핑 베스트) with price, discount, rating, reviews, store and delivery columns, or a price comparison of its top products. ' +
+      'The data is the latest finished daily ranking (snapshot_date says which day). Costs 300 credits per category per day, whatever the limit; fetching the same day again is free; daily free credits are used first. ' +
+      'A category name that matches several categories, or none, returns a list and charges nothing. The first paid use needs the user\'s agreement to the data terms (accept_terms).',
+    inputSchema: {
+      category: z.string().trim().min(1).describe('Category id (e.g. "50001081") or name / path part (e.g. "커피"). See naver_categories.'),
+      limit: z.number().int().min(1).max(30).optional().describe('Rows 1-30 (default 30). The price is the same.'),
+      use_credits: useCredits, accept_terms: acceptTerms, csv_path: csvPath,
+    },
+    annotations: { title: 'Naver Shopping category top 30', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+  }, (args) => naverTopTool(rt, args));
 
   return server.connect(new StdioServerTransport());
 }

@@ -1,17 +1,17 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.hashscraper/mcp",
-  "description": "Coupang top 30 and public web data bots (Naver, Instagram, Olive Young, maps, reviews) for AI agents",
+  "description": "Coupang and Naver Shopping top 30 and public web data bots (Instagram, maps, reviews) for AI agents",
   "repository": {
     "url": "https://github.com/hashscraper/mcp",
     "source": "github"
   },
-  "version": "0.1.0",
+  "version": "0.3.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@hashscraper/mcp",
-      "version": "0.1.0",
+      "version": "0.3.0",
       "transport": {
         "type": "stdio"
       },

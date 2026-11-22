@@ -1,4 +1,4 @@
-// The seven tools. Each handler returns an MCP tool result: { content: [{ type: 'text', text }], isError? }.
+// The nine tools. Each handler returns an MCP tool result: { content: [{ type: 'text', text }], isError? }.
 // No dependencies — src/index.ts only wires these to the MCP SDK. Behaviour mirrors scripts/hashscraper.py of the Agent Skill.
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -20,6 +20,7 @@ export type ToolResult = {
 const ENDED = ['done', 'attention', 'failed', 'canceled'];
 const MAX_TEXT_CHARS = 60_000;
 const MAX_CATALOG_LINES = 30;
+const MAX_COMMUNITY_BOTS = 20;
 const DEFAULT_WAIT_SECONDS = 45;
 const MAX_WAIT_SECONDS = 55;
 
@@ -61,7 +62,7 @@ function termsLine(terms?: Record<string, any>): string {
 }
 
 /** An API error as text for the agent, with what to do next. Limit errors are final for this call — never retry in a loop. */
-export function explain(rt: Runtime, error: ApiError): ToolResult {
+export function explain(rt: Runtime, error: ApiError, shop: Shop = 'coupang'): ToolResult {
   if (error.code === 'TERMS_ACCEPTANCE_REQUIRED') return fail(termsText(error.details.terms || {}));
   const details = error.details;
   const lines = [`HashScraper API error — ${error.code}: ${error.serverMessage}`];
@@ -78,10 +79,11 @@ export function explain(rt: Runtime, error: ApiError): ToolResult {
   } else if (error.code === 'RATE_LIMITED') {
     lines.push(`Too many requests (or 5 data requests today). Wait a while — data requests reset at midnight KST — or email ${HELP_EMAIL}.`);
   } else if (error.code === 'CATEGORY_NOT_AVAILABLE') {
+    const info = SHOPS[shop];
     if (Array.isArray(details.available) && details.available.length) {
-      lines.push(`Available categories: ${details.available.join(', ')} (see the coupang_categories tool)`);
+      lines.push(`Available categories: ${details.available.join(', ')} (see the ${info.listTool} tool)`);
     }
-    lines.push(`To ask for another category, email ${HELP_EMAIL} with the Coupang category URL or id.`);
+    lines.push(`To ask for another category, email ${HELP_EMAIL} with the ${info.requestHint}.`);
   } else if (error.code === 'DATA_NOT_READY') {
     lines.push('No credits were used. The daily snapshot is not finished yet — try again later.');
   } else if (error.code === 'BOT_MAINTENANCE') {
@@ -93,18 +95,18 @@ export function explain(rt: Runtime, error: ApiError): ToolResult {
 }
 
 /** Run a handler body; turn every known failure into a tool result with isError. Never puts the key in a message. */
-function errorResult(rt: Runtime, e: unknown): ToolResult {
+function errorResult(rt: Runtime, e: unknown, shop: Shop = 'coupang'): ToolResult {
   if (e instanceof Stop) return e.result;
-  if (e instanceof ApiError) return explain(rt, e);
+  if (e instanceof ApiError) return explain(rt, e, shop);
   if (e instanceof NetworkError) return fail(`${e.message} Try again in a moment.`);
   return fail('Unexpected error in the HashScraper MCP server. Try again; if it repeats, email ' + HELP_EMAIL + '.');
 }
 
-async function guarded(rt: Runtime, body: () => Promise<ToolResult>): Promise<ToolResult> {
+async function guarded(rt: Runtime, body: () => Promise<ToolResult>, shop: Shop = 'coupang'): Promise<ToolResult> {
   try {
     return await body();
   } catch (e) {
-    return errorResult(rt, e);
+    return errorResult(rt, e, shop);
   }
 }
 
@@ -184,7 +186,39 @@ function parseInputs(raw: Record<string, unknown> | undefined, entry: CatalogBot
   return inputs;
 }
 
-export async function catalogTool(_rt: Runtime, args: { search?: string }): Promise<ToolResult> {
+interface CommunityBot {
+  slug: string; title: string; summary?: string | null; site?: string | null; credits_per_row: number;
+  inputs?: { param?: string; key?: string; name?: string; example?: string | null }[];
+  creator?: { nickname?: string | null } | null;
+}
+
+/**
+ * Bots made by HashScraper members, searched live (needs a key). Never an error for the catalog tool: no key, a switch that is off
+ * (404), or a network failure all leave the built-in list alone.
+ */
+async function communityBlock(rt: Runtime, search: string): Promise<string> {
+  const key = findKey(rt).key;
+  if (!key) return 'Connect with login to also search bots made by members.';
+  let page: any;
+  try {
+    const query: Record<string, string | number> = { limit: MAX_COMMUNITY_BOTS };
+    if (search) query.search = search;
+    page = await call(rt, 'GET', '/community_bots', { key, query });
+  } catch {
+    return '';
+  }
+  const bots: CommunityBot[] = page?.data ?? [];
+  if (bots.length === 0) return '';
+  const lines = bots.map((bot) => {
+    const inputs = (bot.inputs ?? []).map((i) => `${i.key || i.param}=${i.name}${i.example ? ` (e.g. ${JSON.stringify(i.example)})` : ''}`).join(', ');
+    const by = bot.creator?.nickname ? ` · by ${bot.creator.nickname}` : '';
+    return `${bot.slug}  [${bot.site || '-'}] ${bot.title}  ${bot.credits_per_row} credits/row${by}\n    ${bot.summary || ''}\n    inputs: ${inputs}\n    run with public_bot=${bot.slug}`;
+  });
+  const more = page.next_cursor ? '\nMore member bots exist — narrow the search.' : '';
+  return `Bots made by HashScraper members (live) — ${bots.length} shown. Pass public_bot=<slug> to the run tool (not worker). Credits per row are charged to the user who runs it; daily free credits are used first, as for other bots.\n\n${lines.join('\n')}${more}`;
+}
+
+export async function catalogTool(rt: Runtime, args: { search?: string }): Promise<ToolResult> {
   let bots = loadCatalog();
   const needle = (args.search || '').trim().toLowerCase();
   if (needle) bots = bots.filter((bot) => JSON.stringify(bot).toLowerCase().includes(needle));
@@ -194,8 +228,13 @@ export async function catalogTool(_rt: Runtime, args: { search?: string }): Prom
     return `${bot.worker}  [${bot.site_en || bot.site}] ${bot.name}  ${bot.credits_per_row} credits/row${fail7}\n    ${bot.summary || bot.summary_ko || ''}\n    inputs: ${inputs}`;
   });
   const more = bots.length > MAX_CATALOG_LINES ? `\n${bots.length - MAX_CATALOG_LINES} more matches — narrow the search.` : '';
-  if (bots.length === 0) return ok(`No bot matches ${JSON.stringify(args.search)}. ${HELP_HINT}`);
-  return ok(`${bots.length} bots${needle ? ` match ${JSON.stringify(args.search)}` : ''}. Pass the worker name to the run tool.\n\n${lines.join('\n')}${more}`);
+  const community = await communityBlock(rt, (args.search || '').trim());
+  const hasCommunity = community.startsWith('Bots made by');
+  if (bots.length === 0 && !hasCommunity) return ok(`No bot matches ${JSON.stringify(args.search)}. ${HELP_HINT}${community ? `\n${community}` : ''}`);
+  const builtIn = bots.length === 0
+    ? `No built-in bot matches ${JSON.stringify(args.search)}.`
+    : `${bots.length} bots${needle ? ` match ${JSON.stringify(args.search)}` : ''}. Pass the worker name to the run tool.\n\n${lines.join('\n')}${more}`;
+  return ok(community ? `${builtIn}\n\n${community}` : builtIn);
 }
 
 /* ---------- login ---------- */
@@ -372,7 +411,7 @@ async function finish(rt: Runtime, key: string, datasetId: number | string, args
 }
 
 export interface RunArgs {
-  worker: string; inputs?: Record<string, unknown>; use_credits?: boolean; accept_terms?: string;
+  worker?: string; public_bot?: string; inputs?: Record<string, unknown>; use_credits?: boolean; accept_terms?: string;
   wait_seconds?: number; max_rows?: number; csv_path?: string;
 }
 
@@ -438,13 +477,57 @@ async function startCollection(rt: Runtime, key: string, botId: number | string,
   }
 }
 
+/** Add a member-made bot (by its slug) to the account. Always goes through the import, which answers 200 for an existing copy and 201 for a new one. */
+async function importPublicBot(rt: Runtime, key: string, slug: string, notes: string[]): Promise<number> {
+  try {
+    const added = (await call(rt, 'POST', '/bots/import', { key, body: { public_bot: slug } })).data;
+    if (added.created) notes.push(`Added ${added.name || slug} to your account.`);
+    return added.id;
+  } catch (e) {
+    if (e instanceof ApiError && e.code === 'BOT_NOT_FOUND') {
+      throw new Stop(fail(`No member bot ${JSON.stringify(slug)} was found (nothing was collected or charged). It may have been unpublished or hidden, or the slug is misspelled. ` +
+        'Call the catalog tool again to find the current slug.'));
+    }
+    throw e;
+  }
+}
+
+/** Inputs of a member bot: the name / English name / alias -> "paramN", using the bot's own input list. Unknown names go through as given. */
+async function mapPublicInputs(rt: Runtime, key: string, botId: number, raw: Record<string, unknown> | undefined): Promise<Record<string, string>> {
+  const names = new Map<string, string>();
+  const needsList = Object.keys(raw ?? {}).some((name) => !/^param([1-9]|10)$/.test(name.trim()));
+  if (needsList) {
+    // The inputs must be mapped the same way on every call: the request fingerprint (and so the Idempotency-Key that guards
+    // against a second collection) is made from the mapped inputs. Without the list, stop instead of sending other keys.
+    try {
+      const defs: any[] = (await call(rt, 'GET', `/bots/${botId}/inputs`, { key })).data?.inputs ?? [];
+      for (const item of defs) {
+        for (const label of [item.key, item.alias, item.name, item.name_en]) if (label) names.set(String(label).trim().toLowerCase(), item.key);
+      }
+    } catch {
+      throw new Stop(fail('Could not read the inputs of this bot (nothing was collected or charged). Call run again in a moment with the same arguments.'));
+    }
+  }
+  const inputs: Record<string, string> = {};
+  for (const [name, value] of Object.entries(raw ?? {})) {
+    const label = name.trim();
+    inputs[names.get(label.toLowerCase()) || label] = Array.isArray(value) ? value.map(String).join('\n') : String(value);
+  }
+  return inputs;
+}
+
 export async function runTool(rt: Runtime, args: RunArgs): Promise<ToolResult> {
+  const worker = (args.worker || '').trim();
+  const publicBot = (args.public_bot || '').trim();
+  if (!!worker === !!publicBot) {
+    return fail('Pass exactly one of worker (a built-in bot from catalog) or public_bot (the slug of a bot made by a member, from catalog). Nothing was collected or charged.');
+  }
   return guarded(rt, async () => {
     const key = requireKey(rt);
-    const entry = loadCatalog().find((bot) => bot.worker === args.worker);
+    const entry = worker ? loadCatalog().find((bot) => bot.worker === worker) : undefined;
     const notes: string[] = [];
-    if (!entry) notes.push(`${args.worker} is not in this server's catalog. Trying it anyway.`);
-    const inputs = parseInputs(args.inputs, entry);
+    if (worker && !entry) notes.push(`${worker} is not in this server's catalog. Trying it anyway.`);
+    const inputs = worker ? parseInputs(args.inputs, entry) : {};
     const me = (await call(rt, 'GET', '/me', { key })).data;
     const free = me.daily_free;
     if ((free === null || free === undefined) && !args.use_credits) {
@@ -453,13 +536,20 @@ export async function runTool(rt: Runtime, args: RunArgs): Promise<ToolResult> {
     }
     if (free) notes.push(`daily free credits left today: ${free.remaining} / ${free.amount}`);
 
-    const botId = (await findBot(rt, key, args.worker)) ?? (entry ? await importBot(rt, key, args.worker, notes) : undefined);
-    if (!botId) {
-      return fail([...notes, `Your account has no bot for ${args.worker}. Add it from the bot catalog (${BOT_CATALOG}), then call run again. ${HELP_HINT}`].join('\n'));
+    let botId: number | undefined;
+    if (publicBot) {
+      botId = await importPublicBot(rt, key, publicBot, notes);
+      Object.assign(inputs, await mapPublicInputs(rt, key, botId, args.inputs));
+    } else {
+      botId = (await findBot(rt, key, worker)) ?? (entry ? await importBot(rt, key, worker, notes) : undefined);
     }
+    if (!botId) {
+      return fail([...notes, `Your account has no bot for ${worker}. Add it from the bot catalog (${BOT_CATALOG}), then call run again. ${HELP_HINT}`].join('\n'));
+    }
+    const label = worker || `public_bot ${publicBot}`;
     const started = await startCollection(rt, key, botId, inputs, args);
     const datasetId = started.data.id;
-    notes.push(`collecting with ${args.worker} (dataset ${datasetId})...`);
+    notes.push(`collecting with ${label} (dataset ${datasetId})...`);
     try {
       return await finish(rt, key, datasetId, args, notes);
     } catch (e) {
@@ -475,50 +565,80 @@ export async function fetchTool(rt: Runtime, args: { dataset_id: number; wait_se
   return guarded(rt, async () => finish(rt, requireKey(rt), args.dataset_id, args, []));
 }
 
-/* ---------- Coupang ---------- */
+/* ---------- Coupang and Naver Shopping category top 30 ---------- */
+// Same rules for both shops (the API charges and asks for the terms) — only the list path, the tool names and the wording differ.
+// Mirrors SHOPS in scripts/hashscraper.py of the Agent Skill.
 
-export async function coupangCategoriesTool(rt: Runtime, _args: Record<string, never>): Promise<ToolResult> {
+export type Shop = 'coupang' | 'naver';
+
+const SHOPS: Record<Shop, { label: string; path: string; listTool: string; topTool: string; requestHint: string }> = {
+  coupang: {
+    label: 'Coupang', path: '/coupang/categories', listTool: 'coupang_categories', topTool: 'coupang_top',
+    requestHint: 'Coupang category URL or id',
+  },
+  naver: {
+    label: 'Naver Shopping', path: '/naver/categories', listTool: 'naver_categories', topTool: 'naver_top',
+    requestHint: 'Naver Shopping best page URL or category id',
+  },
+};
+
+/** Name, with the parent path for Naver Shopping (e.g. 식품 > 음료 > 커피). */
+const categoryLabel = (c: any): string => String(c.path || c.name);
+
+async function categoriesTool(rt: Runtime, shop: Shop): Promise<ToolResult> {
+  const info = SHOPS[shop];
   return guarded(rt, async () => {
-    const page = await call(rt, 'GET', '/coupang/categories', { key: requireKey(rt) });
+    const page = await call(rt, 'GET', info.path, { key: requireKey(rt) });
     const categories: any[] = page.data ?? [];
-    const lines = categories.map((c) => `${c.category_id}  ${c.name}  latest ${c.latest_date || 'not ready'}  ${c.price_credits} credits per fetch`);
+    const lines = categories.map((c) => `${c.category_id}  ${categoryLabel(c)}  latest ${c.latest_date || 'not ready'}  ${c.price_credits} credits per fetch`);
     return ok([
       ...lines,
-      `${categories.length} categories. Pass a category id or name to the coupang_top tool. Not in the list? Email ${HELP_EMAIL} with the Coupang category URL or id.`,
+      `${categories.length} categories. Pass a category id or name to the ${info.topTool} tool. Not in the list? Email ${HELP_EMAIL} with the ${info.requestHint}.`,
       termsLine(page.terms),
     ].filter(Boolean).join('\n'));
-  });
+  }, shop);
+}
+
+export async function coupangCategoriesTool(rt: Runtime, _args: Record<string, never>): Promise<ToolResult> {
+  return categoriesTool(rt, 'coupang');
+}
+
+export async function naverCategoriesTool(rt: Runtime, _args: Record<string, never>): Promise<ToolResult> {
+  return categoriesTool(rt, 'naver');
 }
 
 /** A category id as is, or a name looked up in the category list (one match only). */
-async function resolveCategory(rt: Runtime, key: string, wanted: string): Promise<string> {
+async function resolveCategory(rt: Runtime, key: string, wanted: string, shop: Shop): Promise<string> {
+  const info = SHOPS[shop];
   const text = wanted.trim();
-  if (!text) throw new Stop(fail('category is empty (nothing was requested or charged). Pass a category id or name — see the coupang_categories tool.'));
+  if (!text) throw new Stop(fail(`category is empty (nothing was requested or charged). Pass a category id or name — see the ${info.listTool} tool.`));
   if (/^\d+$/.test(text)) return text;
-  const categories: any[] = (await call(rt, 'GET', '/coupang/categories', { key })).data ?? [];
+  const categories: any[] = (await call(rt, 'GET', info.path, { key })).data ?? [];
   const needle = text.toLowerCase();
   const exact = categories.filter((c) => String(c.name).toLowerCase() === needle);
-  const found = exact.length ? exact : categories.filter((c) => String(c.name).toLowerCase().includes(needle));
+  const found = exact.length ? exact : categories.filter((c) => categoryLabel(c).toLowerCase().includes(needle));
   if (found.length === 1) return String(found[0].category_id);
-  const list = (items: any[]) => items.map((c) => `  ${c.category_id}  ${c.name}`).join('\n');
+  const list = (items: any[]) => items.map((c) => `  ${c.category_id}  ${categoryLabel(c)}`).join('\n');
   if (found.length) {
-    throw new Stop(fail(`Several categories match ${JSON.stringify(text)}. Ask the user which one, then call coupang_top again with one of these ids (nothing was requested or charged):\n${list(found)}`));
+    throw new Stop(fail(`Several categories match ${JSON.stringify(text)}. Ask the user which one, then call ${info.topTool} again with one of these ids (nothing was requested or charged):\n${list(found)}`));
   }
   const available = categories.length ? `Available:\n${list(categories)}` : 'No categories are available yet.';
-  throw new Stop(fail(`No Coupang category matches ${JSON.stringify(text)} (nothing was requested or charged). ${available}\n` +
-    `To ask for another category, email ${HELP_EMAIL} with the Coupang category URL or id.`));
+  throw new Stop(fail(`No ${info.label} category matches ${JSON.stringify(text)} (nothing was requested or charged). ${available}\n` +
+    `To ask for another category, email ${HELP_EMAIL} with the ${info.requestHint}.`));
 }
 
-export interface CoupangTopArgs {
+export interface CategoryTopArgs {
   category: string; limit?: number; use_credits?: boolean; accept_terms?: string; csv_path?: string;
 }
+export type CoupangTopArgs = CategoryTopArgs;
 
-export async function coupangTopTool(rt: Runtime, args: CoupangTopArgs): Promise<ToolResult> {
+async function categoryTopTool(rt: Runtime, args: CategoryTopArgs, shop: Shop): Promise<ToolResult> {
+  const info = SHOPS[shop];
   return guarded(rt, async () => {
     const key = requireKey(rt);
     const limit = Math.min(Math.max(Math.floor(args.limit ?? 30), 1), 30);
-    const categoryId = await resolveCategory(rt, key, args.category);
-    const data = (await call(rt, 'GET', `/coupang/categories/${encodeURIComponent(categoryId)}/top`, {
+    const categoryId = await resolveCategory(rt, key, args.category, shop);
+    const data = (await call(rt, 'GET', `${info.path}/${encodeURIComponent(categoryId)}/top`, {
       key, query: { limit }, useCredits: args.use_credits, acceptTerms: args.accept_terms,
     })).data;
     const rows: Record<string, any>[] = data.rows ?? [];
@@ -526,12 +646,20 @@ export async function coupangTopTool(rt: Runtime, args: CoupangTopArgs): Promise
     const paid: Record<string, string> = {
       daily_free: 'daily free credits', credits: 'your own credits', none: 'already fetched this snapshot, no charge',
     };
-    let summary = `${data.category.name} (${data.category.category_id}) · snapshot ${data.snapshot_date} (collected once a day) · ${rows.length} rows · ` +
+    let summary = `${categoryLabel(data.category)} (${data.category.category_id}) · snapshot ${data.snapshot_date} (collected once a day) · ${rows.length} rows · ` +
       `charged ${data.charged_credits ?? 0} credits (${paid[data.charged_from] ?? data.charged_from})`;
     const free = data.daily_free || {};
     if (free.remaining !== undefined) summary += ` · daily free left ${free.remaining}`;
     return ok([summary, delivered, termsLine(data.terms), FOOTER].filter(Boolean).join('\n'));
-  });
+  }, shop);
+}
+
+export async function coupangTopTool(rt: Runtime, args: CategoryTopArgs): Promise<ToolResult> {
+  return categoryTopTool(rt, args, 'coupang');
+}
+
+export async function naverTopTool(rt: Runtime, args: CategoryTopArgs): Promise<ToolResult> {
+  return categoryTopTool(rt, args, 'naver');
 }
 
 export { defaultRuntime };

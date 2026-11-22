@@ -2,9 +2,9 @@
   "manifest_version": "0.3",
   "name": "hashscraper",
   "display_name": "HashScraper",
-  "version": "0.1.0",
-  "description": "Coupang top 30 and public web data bots (Naver, Instagram, Olive Young, maps, reviews) for AI agents",
-  "long_description": "Collect public web data from your AI agent with HashScraper's 120+ ready-made data bots — Coupang best-seller top 30 by category, Naver blog/cafe/news/shopping/maps, Instagram, YouTube, Olive Young, Musinsa, Kurly, KREAM, Google/Kakao maps, app stores and more. Connect your account with the login tool (free sign-up included) or set an API key from My page -> API.",
+  "version": "0.3.0",
+  "description": "Coupang and Naver Shopping top 30 and public web data bots (Instagram, maps, reviews) for AI agents",
+  "long_description": "Collect public web data from your AI agent with HashScraper's 120+ ready-made data bots — Coupang and Naver Shopping best-seller top 30 by category, Naver blog/cafe/news/shopping/maps, Instagram, YouTube, Olive Young, Musinsa, Kurly, KREAM, Google/Kakao maps, app stores and more. Connect your account with the login tool (free sign-up included) or set an API key from My page -> API.",
   "author": {
     "name": "HashScraper",
     "url": "https://www.hashscraper.com"
@@ -58,11 +58,11 @@
     },
     {
       "name": "catalog",
-      "description": "Search the built-in list of 120+ ready-made data bots and their inputs. Works offline."
+      "description": "Search the built-in list of 120+ ready-made data bots and their inputs. The built-in list works offline; once connected it also searches bots made by HashScraper members, live."
     },
     {
       "name": "run",
-      "description": "Collect public web data with one HashScraper bot and return the rows."
+      "description": "Collect public web data with one HashScraper bot (built-in, or one made by a member via public_bot) and return the rows."
     },
     {
       "name": "fetch",
@@ -75,6 +75,14 @@
     {
       "name": "coupang_top",
       "description": "Get today's best-selling top 30 products of a Coupang category with price, reviews and delivery."
+    },
+    {
+      "name": "naver_categories",
+      "description": "List the Naver Shopping categories whose daily best-selling top 30 is ready."
+    },
+    {
+      "name": "naver_top",
+      "description": "Get the latest daily best-selling top 30 products of a Naver Shopping category with price, reviews and store."
     }
   ],
   "compatibility": {
