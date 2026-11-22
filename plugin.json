@@ -1,0 +1,21 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "hashscraper",
+  "description": "Korean platform data for AI agents: daily Coupang and Naver Shopping top 30 rankings and 120+ ready-made public web data bots (Naver, Coupang, Olive Young, Musinsa, Kurly, KREAM, Kakao Map, Instagram, YouTube).",
+  "author": {
+    "name": "HashScraper",
+    "url": "https://www.hashscraper.com"
+  },
+  "homepage": "https://www.hashscraper.com/mcp?utm_source=agent-plugins&utm_medium=mcp",
+  "repository": "https://github.com/hashscraper/mcp",
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "web-scraping",
+    "coupang",
+    "naver",
+    "korea",
+    "ecommerce",
+    "data-collection"
+  ]
+}

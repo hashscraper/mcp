@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "hashscraper": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@hashscraper/mcp"
+      ]
+    }
+  }
+}
